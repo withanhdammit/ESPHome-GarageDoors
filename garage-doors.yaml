@@ -1,0 +1,357 @@
+substitutions:
+  sensorname: garage-door
+  entitysub: Garage Door
+  ipaddress: 10.42.100.111
+  domain: !secret domain
+
+esphome:
+  name: $sensorname
+
+esp32:
+  board: esp32dev
+  framework:
+#    type: arduino
+    type: esp-idf
+    version: recommended
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  password: !secret ota_password
+
+wifi:
+  ssid: !secret iot_ssid
+  password: !secret iot_password
+  manual_ip:
+    static_ip: $ipaddress
+    subnet: !secret subnet
+    gateway: !secret gateway
+    dns1: !secret dns_iot
+  #use_address: $sensorname.$domain
+  use_address: $ipaddress
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: $sensorname
+    password: !secret ap_password
+  
+captive_portal:
+
+#web_server:
+#  port: 80
+#  auth:
+#    username: !secret web_username
+#    password: !secret ap_password
+
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 1100ms
+    window: 1100ms
+    active: true
+bluetooth_proxy:
+  active: true
+
+switch:
+  - platform: restart
+    name: "${entitysub} Restart"
+  - platform: factory_reset
+    name: "${entitysub} Factory Reset"
+  - platform: safe_mode
+    name: "${entitysub} Safe Mode"
+  - platform: gpio
+    pin: GPIO21
+    name: "${entitysub} 1 Relay"
+    id: garage_door_1_relay
+    internal: true
+    on_turn_on:
+      - delay: 250ms
+      - switch.turn_off: garage_door_1_relay
+  - platform: template
+    name: "${entitysub} 1 Lock"
+    icon: mdi:garage-lock
+    id:  garage_door_1_lock
+    optimistic: true
+  - platform: gpio
+    pin: GPIO18
+    name: "${entitysub} 2 Relay"
+    id: garage_door_2_relay
+    internal: true
+    on_turn_on:
+      - delay: 250ms
+      - switch.turn_off: garage_door_2_relay
+  - platform: template
+    name: "${entitysub} 2 Lock"
+    icon: mdi:garage-lock
+    id:  garage_door_2_lock
+    optimistic: true
+  - platform: template
+    name: "${entitysub} Config Mode"
+    id: config_mode
+    turn_on_action:
+      - switch.template.publish:
+          id: config_mode
+          state: ON
+    turn_off_action:
+      - switch.template.publish:
+          id: config_mode
+          state: OFF
+    optimistic: False
+    icon: mdi:gesture-swipe
+    
+binary_sensor:
+  - platform: status
+    name: "${entitysub} Status"
+  - platform: template
+    name: "${entitysub} 1 Status"
+    id:  garage_door_1_status
+    device_class: problem
+  - platform: template
+    name: "${entitysub} 1 State"
+    id: garage_door_1_open_state
+    device_class: garage_door
+  - platform: template
+    name: "${entitysub} 2 Status"
+    id:  garage_door_2_status
+    device_class: problem
+  - platform: template
+    name: "${entitysub} 2 State"
+    id: garage_door_2_open_state
+    device_class: garage_door
+  - platform: gpio
+    pin:
+      number: GPIO17
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    filters:
+      - delayed_on_off: 500ms
+    name: "${entitysub} 1 Open Sensor"
+    id: garage_door_1_open
+    #internal: true
+    on_press:
+      - cover.template.publish:
+          id: garage_door_1
+          state: OPEN
+          current_operation: IDLE
+      - binary_sensor.template.publish:
+          id:  garage_door_1_status
+          state: OFF
+    on_release: 
+      - cover.template.publish:
+          id: garage_door_1
+          current_operation: CLOSING  
+      - delay: 25s
+      - if:
+          condition:
+            binary_sensor.is_off: garage_door_1_closed
+          then: 
+              - binary_sensor.template.publish:
+                  id:  garage_door_1_status
+                  state: ON
+  - platform: gpio
+    pin:
+      number: GPIO22
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    filters:
+      - delayed_on_off: 500ms
+    name: "${entitysub} 1 Closed Sensor"
+    id: garage_door_1_closed
+    #internal: true
+    on_press:
+      - cover.template.publish:
+          id: garage_door_1
+          state: CLOSED
+          current_operation: IDLE
+      - binary_sensor.template.publish:
+          id:  garage_door_1_status
+          state: OFF
+      - binary_sensor.template.publish:
+          id: garage_door_1_open_state
+          state: OFF
+    on_release: 
+      - cover.template.publish:
+          id: garage_door_1
+          current_operation: OPENING    
+      - binary_sensor.template.publish:
+          id: garage_door_1_open_state
+          state: ON
+      - delay: 25s
+      - if:
+          condition:
+            binary_sensor.is_off: garage_door_1_open
+          then: 
+            - binary_sensor.template.publish:
+                id:  garage_door_1_status
+                state: ON
+  - platform: gpio
+    pin:
+      number: GPIO26
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    filters:
+      - delayed_on_off: 500ms
+    name: "${entitysub} 2 Open Sensor"
+    id: garage_door_2_open
+    #internal: true
+    on_press:
+      - cover.template.publish:
+          id: garage_door_2
+          state: OPEN
+          current_operation: IDLE
+      - binary_sensor.template.publish:
+          id:  garage_door_2_status
+          state: OFF
+    on_release: 
+      - cover.template.publish:
+          id: garage_door_2
+          current_operation: CLOSING  
+      - delay: 25s
+      - if:
+          condition:
+            binary_sensor.is_off: garage_door_2_closed
+          then: 
+              - binary_sensor.template.publish:
+                  id:  garage_door_2_status
+                  state: ON
+  - platform: gpio
+    pin:
+      number: GPIO19
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    filters:
+      - delayed_on_off: 500ms
+    name: "${entitysub} 2 Closed Sensor"
+    id: garage_door_2_closed
+    #internal: true
+    on_press:
+      - cover.template.publish:
+          id: garage_door_2
+          state: CLOSED
+          current_operation: IDLE
+      - binary_sensor.template.publish:
+          id:  garage_door_2_status
+          state: OFF
+      - binary_sensor.template.publish:
+          id: garage_door_2_open_state
+          state: OFF
+    on_release: 
+      - cover.template.publish:
+          id: garage_door_2
+          current_operation: OPENING    
+      - binary_sensor.template.publish:
+          id: garage_door_2_open_state
+          state: ON
+      - delay: 25s
+      - if:
+          condition:
+            binary_sensor.is_off: garage_door_2_open
+          then: 
+              - binary_sensor.template.publish:
+                  id:  garage_door_2_status
+                  state: ON
+
+cover:
+  - platform: template
+    id: garage_door_1
+    name: "${entitysub} 1"
+    device_class: garage
+    open_action:
+        - if:
+            condition:
+              - and:
+                - switch.is_off:  garage_door_1_lock
+                - binary_sensor.is_on: garage_door_1_closed
+            then: 
+              - switch.turn_on: garage_door_1_relay
+    close_action:
+      - if:
+          condition:
+            - and:
+              - switch.is_off:  garage_door_1_lock
+              - binary_sensor.is_on: garage_door_1_open
+          then: 
+            - switch.turn_on: garage_door_1_relay
+    stop_action:
+      - if:
+          condition:
+            - and:
+              - switch.is_off:  garage_door_1_lock
+              - binary_sensor.is_off: garage_door_1_closed
+              - binary_sensor.is_off: garage_door_1_open
+          then: 
+            - switch.turn_on: garage_door_1_relay
+  - platform: template
+    id: garage_door_2
+    name: "${entitysub} 2"
+    device_class: garage
+    open_action:
+        - if:
+            condition:
+              - and:
+                - switch.is_off:  garage_door_2_lock
+                - binary_sensor.is_on: garage_door_2_closed
+            then: 
+              - switch.turn_on: garage_door_2_relay
+    close_action:
+      - if:
+          condition:
+            - and:
+              - switch.is_off:  garage_door_2_lock
+              - binary_sensor.is_on: garage_door_2_open
+          then: 
+            - switch.turn_on: garage_door_2_relay
+    stop_action:
+      - if:
+          condition:
+            - and:
+              - switch.is_off:  garage_door_2_lock
+              - binary_sensor.is_off: garage_door_2_closed
+              - binary_sensor.is_off: garage_door_2_open
+          then: 
+            - switch.turn_on: garage_door_2_relay
+
+sensor:
+  - platform: uptime
+    name: ${entitysub} Uptime
+  - platform: internal_temperature
+    name: "${entitysub} ESP Temp"
+  - platform: wifi_signal # WiFi signal strength in dB
+    name: "${entitysub} WiFi Signal dB"
+    id: wifi_signal_db
+    update_interval: 60s
+    entity_category: "diagnostic"
+  - platform: copy # WiFi signal strength in %
+    source_id: wifi_signal_db
+    name: "${entitysub} WiFi Signal %"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "%"
+    entity_category: "diagnostic"
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: ${entitysub} IP
+    ssid:
+      name: ${entitysub} SSID
+    bssid:
+      name: ${entitysub} AP MAC
+    mac_address:
+      name: ${entitysub} MAC
+    dns_address:
+      name: ${entitysub} DNS Server
+#    scan_results:
+#      name: ${entitysub} Scan Results
